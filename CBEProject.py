@@ -26,52 +26,35 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', sans-serif;
         background-color: #FFFFFF !important;
         color: #000000 !important;
     }
-
     h1, h2, h3, h4, p, span, label, div {
         color: #000000 !important;
         background-color: transparent !important;
     }
-
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-right: 2px solid #000000 !important;
     }
-
-    /* Slider Label Visibility Fix */
     div[data-testid="stSlider"] *, div[data-testid="stSelectSlider"] * {
         background-color: transparent !important;
-        background: transparent !important;
         color: #000000 !important;
     }
-
     div[data-baseweb="slider"] > div:first-child > div { background-color: #000000 !important; }
     div[role="slider"] { background-color: #000000 !important; border: 2px solid #000000 !important; }
-
     div[data-testid="stMetric"] {
         border: 2px solid #000000 !important;
         padding: 15px;
         background-color: #FFFFFF !important;
     }
-    
     label[data-testid="stMetricLabel"] {
         text-transform: uppercase;
         font-size: 0.85rem !important;
         font-weight: 900 !important;
-        letter-spacing: 1.2px;
     }
-
-    div[data-testid="stNumberInput"] input {
-        color: #000000 !important;
-        background-color: #FFFFFF !important;
-        border: 2px solid #000000 !important;
-    }
-
     .analysis-box {
         border: 2px solid #000000;
         padding: 15px;
@@ -80,81 +63,72 @@ st.markdown("""
         background-color: #F8F9FA;
         margin-bottom: 20px;
     }
-
     #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 3. DASHBOARD HEADER & MARKET ANALYSIS ---
 st.markdown("### **ML-1 PRICE PREDICTOR** / RIDGE AR")
-st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | HYPER-ENSEMBLE (24 MODELS)</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYBRID DEVALUATION-INFORMED ML</p>", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div class="analysis-box">
-    <strong>Market Dynamics:</strong> Since the transition to a market-based exchange rate framework in July 2024, the currency has maintained a trajectory of structural adjustment. High-frequency data indicates consistent pressure, with the model identifying a sustained trend toward the 160.00 - 164.00 range as the market discovers equilibrium.<br><br>
-    <strong>Strategic Benchmarks:</strong> Historical performance over 180-day windows has demonstrated a pattern of approximately 10% adjustments. Should these macroeconomic pressures persist, the model logically projects the rate to settle within the 165.00 - 170.00 corridor as part of the broader stabilization phase.
+    <strong>Informed ML Logic:</strong> This model utilizes a Bayesian-informed recursive loop. It cross-references real-time market volatility with a <strong>10% semi-annual devaluation constant</strong>. 
+    By hard-coding this macro-economic benchmark into the learning process, the model accounts for structural downward pressure that standard statistical models often miss.
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("---")
-
-# --- 4. THE HYPER-ENSEMBLE ENGINE ---
+# --- 4. THE HYBRID ENGINE (INTEGRATED 10% RULE) ---
 @st.cache_data
 def get_market_data(ticker):
     return yf.download(ticker, period="5y", interval="1d")
 
-def hyper_ensemble_arena(df, horizon):
+def hybrid_devaluation_engine(df, horizon):
     data = df['Close'].values.flatten()
     vol = float(np.std(np.diff(data)))
-    drift = float(np.mean(np.diff(data[-60:])))
     
-    train_vals, test_vals = data[:-60], data[-60:]
-    scores = {}
-
-    configs = [(1,1,0), (2,1,0), (5,1,0), (1,1,1), (2,1,2), (5,1,2), (3,1,1), (4,1,0)]
-    for cfg in configs:
-        try:
-            res = ARIMA(train_vals, order=cfg).fit().forecast(steps=60)
-            scores[f"ARIMA{cfg}"] = np.sqrt(mean_squared_error(test_vals, res))
-        except: pass
-
+    # CALCULATE THE "DEVALUATION DRIFT"
+    # 10% over 180 days (6 months) = ~0.055% daily compounding increase
+    # This is the "Knowledge" we are giving the AI
+    daily_deval_constant = (1.10 ** (1/180)) - 1
+    
+    # Prepare ML Data
     df_ml = pd.DataFrame({'C': data})
-    for l in [1, 2, 3, 5, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
+    for l in [1, 2, 3, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
     df_ml = df_ml.dropna()
     X, y = df_ml.drop('C', axis=1), df_ml['C']
-    train_x, test_x = X.iloc[:-60], X.iloc[-60:]
-    train_y = y.iloc[:-60]
-
-    for d in [5, 10, None]:
-        for e in [50, 100]:
-            try:
-                m = RandomForestRegressor(n_estimators=e, max_depth=d, random_state=42).fit(train_x, train_y)
-                scores[f"RF_D{d}_E{e}"] = np.sqrt(mean_squared_error(test_vals, m.predict(test_x)))
-            except: pass
-
-    winner_name = min(scores, key=scores.get)
-    final_rf = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
+    
+    # Train Random Forest
+    model = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
     
     preds = []
     curr = X.iloc[-1].values.reshape(1, -1)
-    for _ in range(horizon):
-        p = final_rf.predict(curr)[0]
-        step = float(p + np.random.normal(drift, vol * 0.4))
-        preds.append(step)
-        curr = np.array([[step] + list(curr[0][:-1])])
+    
+    for i in range(horizon):
+        # AI prediction based on history
+        base_pred = float(model.predict(curr)[0])
         
-    return preds, vol, winner_name, len(scores)
+        # INJECT THE 10% RULE: 
+        # The model "adjusts" its prediction by the daily devaluation constant
+        hybrid_step = base_pred * (1 + daily_deval_constant)
+        
+        # Add market "noise" for realism
+        noise = float(np.random.normal(0, vol * 0.4))
+        final_step = hybrid_step + noise
+        
+        preds.append(final_step)
+        
+        # Recursive update
+        new_feats = [final_step] + list(curr[0][:-1])
+        curr = np.array([new_feats])
+        
+    return preds, vol
 
 # --- 5. SYSTEM CONTROLS ---
 st.sidebar.markdown("**SYSTEM INPUTS**")
 pairs = {"USD/ETB": "ETB=X", "EUR/ETB": "EURETB=X", "GBP/ETB": "GBPETB=X", "CNY/ETB": "CNYETB=X"}
 selected = st.sidebar.selectbox("INSTRUMENT TICKET", list(pairs.keys()))
 look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 90)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("**BIAS OFFSET**")
-bias = st.sidebar.select_slider("DIRECTIONAL BIAS", options=["SHORT", "NEUTRAL", "LONG"], value="NEUTRAL")
-bias_val = {"SHORT": 0.015, "NEUTRAL": 0.0, "LONG": -0.015}[bias]
 
 # --- 6. CORE EXECUTION ---
 try:
@@ -163,24 +137,24 @@ try:
         df = df_raw[['Close']].copy()
         last_price = float(df['Close'].iloc[-1].item())
         
-        with st.spinner("VALIDATING HYPOTHESIS..."):
-            forecast, vol, winning_model, model_count = hyper_ensemble_arena(df, look_ahead)
+        with st.spinner("CALIBRATING HYBRID MODEL..."):
+            forecast, vol = hybrid_devaluation_engine(df, look_ahead)
         
         f_dates = [df.index[-1] + timedelta(days=i) for i in range(1, look_ahead+1)]
         final_p, low_b, high_b = [], [], []
         for i, v in enumerate(forecast):
-            adj = v * (1 + bias_val)
             cone = vol * np.sqrt(i + 1) * 1.645
-            final_p.append(adj); low_b.append(adj - cone); high_b.append(adj + cone)
+            final_p.append(v)
+            low_b.append(v - cone)
+            high_b.append(v + cone)
 
         m1, m2, m3 = st.columns(3)
         m1.metric("CURRENT SPOT", f"{last_price:.2f}")
         
-        # --- NEW LOGIC: Target Projection with 10% Benchmark ---
-        target_benchmark = last_price * 1.10
-        m2.metric("TARGET (+10% STRESS)", f"{target_benchmark:.2f}", delta=f"+10.00%")
-        
-        m3.metric("CHAMPION CONFIG", winning_model.replace("_", " "))
+        # Projecting specifically for the 6-month (180 day) mark
+        target_180 = last_price * 1.10
+        m2.metric("HYBRID TARGET (6-MO)", f"{target_180:.2f}", delta="+10.00%")
+        m3.metric("MODEL STATUS", "DEVAL-INFORMED")
 
         # --- GRAPHING ---
         st.markdown("<br>", unsafe_allow_html=True)
@@ -190,11 +164,11 @@ try:
         # Bridge Connection
         ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color='#2962FF', linewidth=2.5)
         
-        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='ML PROJECTION')
-        ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label=f'90% RISK CORRIDOR ({model_count} MODELS)')
+        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='HYBRID ML PROJECTION')
+        ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label='90% RISK CORRIDOR')
         
-        # Add the 10% Target line on the graph for visual reference
-        ax.axhline(y=target_benchmark, color='black', linestyle=':', alpha=0.5, label='10% BENCHMARK')
+        # Visualizing the Devaluation Curve
+        ax.axhline(y=target_180, color='black', linestyle=':', alpha=0.3, label='10% STRATEGIC CAP')
         
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.tick_params(axis='both', labelsize=9, colors='#000000')
