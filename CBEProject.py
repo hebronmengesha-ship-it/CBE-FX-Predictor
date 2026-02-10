@@ -10,6 +10,9 @@ from sklearn.metrics import mean_squared_error
 from datetime import date, timedelta
 import warnings
 
+# Force a web-safe chart backend
+import matplotlib
+matplotlib.use('Agg')
 warnings.filterwarnings("ignore")
 
 # --- 1. CORE INTERFACE SETTINGS ---
@@ -19,9 +22,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. HIGH-CONTRAST MONOCHROME CSS (READABILITY FIXES) ---
-st.markdown(
-    """
+# --- 2. THE ULTIMATE "ZERO-OVERLAY" CSS (FINAL FIX) ---
+st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
@@ -31,6 +33,7 @@ st.markdown(
         color: #000000 !important;
     }
 
+    /* Force Black Text Visibility */
     h1, h2, h3, h4, p, span, label, div {
         color: #000000 !important;
         background-color: transparent !important;
@@ -38,189 +41,114 @@ st.markdown(
 
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
-        border-right: 1px solid #000000;
+        border-right: 2px solid #000000 !important;
     }
 
-    /* Slider track (limit scope to track only) */
-    div[data-baseweb="slider"] > div:first-child > div {
-        background-color: #000000 !important;
-    }
-
-    /* Slider thumb */
-    div[role="slider"] {
-        background-color: #000000 !important;
-        border: 2px solid #000000 !important;
-    }
-
-    /* Slider thumb value bubble (if shown) */
-    div[data-testid="stThumbValue"] {
-        color: #000000 !important;
-        font-weight: 700 !important;
-        background-color: #FFFFFF !important;
-        border: 1px solid #000000 !important;
-        border-radius: 8px !important;
-        padding: 2px 6px !important;
-    }
-
-    /* Slider end labels + ticks (min/max and tick marks) */
-    div[data-testid="stTickBarMin"], div[data-testid="stTickBarMax"], div[data-testid="stSliderTick"],
-    span[data-testid="stTickBarMin"], span[data-testid="stTickBarMax"], span[data-testid="stSliderTick"] {
-        color: #000000 !important;
-        font-weight: 700 !important;
-        background-color: #FFFFFF !important;
-        border: 1px solid #000000 !important;
-        border-radius: 8px !important;
-        padding: 2px 8px !important;
-    }
-
-    /* Prevent tick bar container from rendering as a solid block */
-    div[data-testid="stTickBar"] {
+    /* --- SLIDER LABEL REPAIR --- */
+    /* This kills the black highlight boxes in the sidebar */
+    div[data-testid="stSlider"] *, div[data-testid="stSelectSlider"] * {
         background-color: transparent !important;
-    }
-
-    /* FIX: number_input value text visibility */
-    div[data-baseweb="input"] input,
-    div[data-baseweb="input"] textarea {
+        background: transparent !important;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; /* Safari/Chrome */
-        font-weight: 700 !important;
-        background-color: #FFFFFF !important;
     }
 
-    div[data-baseweb="input"] input::placeholder,
-    div[data-baseweb="input"] textarea::placeholder {
-        color: #000000 !important;
-        opacity: 0.6 !important;
-    }
+    /* Slider Track & Thumb (Solid Black) */
+    div[data-baseweb="slider"] > div:first-child > div { background-color: #000000 !important; }
+    div[role="slider"] { background-color: #000000 !important; border: 2px solid #000000 !important; }
+    div[data-testid="stThumbValue"] { font-weight: 800 !important; }
 
+    /* Metric Panels: Clinical Black Borders */
     div[data-testid="stMetric"] {
         border: 2px solid #000000 !important;
         padding: 15px;
         background-color: #FFFFFF !important;
     }
-
+    
     label[data-testid="stMetricLabel"] {
         text-transform: uppercase;
-        font-size: 0.8rem !important;
-        font-weight: 800 !important;
+        font-size: 0.85rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 1.2px;
+    }
+
+    /* Settlement Tool Layout Fix */
+    div[data-testid="stNumberInput"] input {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+        border: 2px solid #000000 !important;
+    }
+
+    .settlement-display {
+        border: 2px solid #000000;
+        padding: 15px;
+        font-family: monospace;
+        font-weight: 800;
+        color: #000000;
+        background-color: #FFFFFF;
+        margin-top: 5px;
     }
 
     #MainMenu, footer, header {visibility: hidden;}
 </style>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 # --- 3. DASHBOARD HEADER ---
 st.markdown("### **ML-1 PRICE PREDICTOR** / RIDGE AR")
-st.markdown(
-    f"<p style='font-size: 13px; font-weight: 600; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYPER-ENSEMBLE (24 CONFIGS)</p>",
-    unsafe_allow_html=True
-)
+st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYPER-ENSEMBLE (24 CONFIGS)</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 4. THE HYPER-ENSEMBLE ARENA ---
+# --- 4. THE HYPER-ENSEMBLE ENGINE ---
 @st.cache_data
-def get_market_data(ticker: str) -> pd.DataFrame:
+def get_market_data(ticker):
     return yf.download(ticker, period="5y", interval="1d")
 
-def hyper_ensemble_arena(df: pd.DataFrame, horizon: int):
-    data = df["Close"].values.flatten()
+def hyper_ensemble_arena(df, horizon):
+    data = df['Close'].values.flatten()
     vol = float(np.std(np.diff(data)))
     drift = float(np.mean(np.diff(data[-60:])))
-
-    # Hidden Validation Set (Last 60 Days)
-    train_vals = data[:-60]
-    test_vals = data[-60:]
-
+    
+    train_vals, test_vals = data[:-60], data[-60:]
     scores = {}
 
-    # --- BLOCK 1: 12 ARIMA CONFIGURATIONS (Varying p,d,q) ---
-    arima_configs = [
-        (1, 1, 0), (2, 1, 0), (5, 1, 0),
-        (0, 1, 1), (1, 1, 1), (2, 1, 2),
-        (5, 1, 2), (1, 2, 1), (0, 2, 1),
-        (3, 1, 1), (4, 1, 0), (2, 1, 1),
-    ]
-    for cfg in arima_configs:
+    # ARIMA 12-Pack
+    configs = [(1,1,0), (2,1,0), (5,1,0), (0,1,1), (1,1,1), (2,1,2), (5,1,2), (1,2,1), (0,2,1), (3,1,1), (4,1,0), (2,1,1)]
+    for cfg in configs:
         try:
-            name = f"ARIMA{cfg}"
             res = ARIMA(train_vals, order=cfg).fit().forecast(steps=60)
-            scores[name] = float(np.sqrt(mean_squared_error(test_vals, res)))
-        except:
-            pass
+            scores[f"ARIMA{cfg}"] = np.sqrt(mean_squared_error(test_vals, res))
+        except: pass
 
-    # --- BLOCK 2: 4 EXPONENTIAL SMOOTHING CONFIGS ---
-    try:
-        scores["ETS_Simple"] = float(np.sqrt(mean_squared_error(
-            test_vals, SimpleExpSmoothing(train_vals).fit().forecast(60)
-        )))
-        scores["ETS_Holt"] = float(np.sqrt(mean_squared_error(
-            test_vals, ExponentialSmoothing(train_vals, trend="add").fit().forecast(60)
-        )))
-        scores["ETS_Damped"] = float(np.sqrt(mean_squared_error(
-            test_vals, ExponentialSmoothing(train_vals, trend="add", damped_trend=True).fit().forecast(60)
-        )))
-        scores["ETS_Auto"] = float(np.sqrt(mean_squared_error(
-            test_vals, ExponentialSmoothing(train_vals).fit().forecast(60)
-        )))
-    except:
-        pass
-
-    # --- BLOCK 3: RANDOM FOREST CONFIGS (Varying Depths & Estimators) ---
-    df_ml = pd.DataFrame({"C": data})
-    for l in [1, 2, 3, 5, 7, 14, 30]:
-        df_ml[f"L{l}"] = df_ml["C"].shift(l)
+    # RF 8-Pack
+    df_ml = pd.DataFrame({'C': data})
+    for l in [1, 2, 3, 5, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
     df_ml = df_ml.dropna()
-
-    X, y = df_ml.drop("C", axis=1), df_ml["C"]
-
+    X, y = df_ml.drop('C', axis=1), df_ml['C']
     train_x, test_x = X.iloc[:-60], X.iloc[-60:]
     train_y = y.iloc[:-60]
 
-    rf_depths = [5, 10, 20, None]
-    rf_estimators = [50, 100]
-    for d in rf_depths:
-        for e in rf_estimators:
+    for d in [5, 10, 20, None]:
+        for e in [50, 100]:
             try:
-                name = f"RF_D{d}_E{e}"
-                m = RandomForestRegressor(
-                    n_estimators=e,
-                    max_depth=d,
-                    random_state=42
-                ).fit(train_x, train_y)
-                res = m.predict(test_x)
-                scores[name] = float(np.sqrt(mean_squared_error(test_vals, res)))
-            except:
-                pass
+                m = RandomForestRegressor(n_estimators=e, max_depth=d, random_state=42).fit(train_x, train_y)
+                scores[f"RF_D{d}_E{e}"] = np.sqrt(mean_squared_error(test_vals, m.predict(test_x)))
+            except: pass
 
     winner_name = min(scores, key=scores.get)
-
-    # Final Projection (Recursive RF)
     final_rf = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
+    
     preds = []
     curr = X.iloc[-1].values.reshape(1, -1)
-
     for _ in range(horizon):
-        p = float(final_rf.predict(curr)[0])
-        noise = float(np.random.normal(drift, vol * 0.4))
-        step = p + noise
-        preds.append(float(step))
-
-        # Shift features: new first element is step, drop the last lag
-        new_feats = [step] + list(curr[0][:-1])
-        curr = np.array([new_feats])
-
+        p = final_rf.predict(curr)[0]
+        step = float(p + np.random.normal(drift, vol * 0.4))
+        preds.append(step)
+        curr = np.array([[step] + list(curr[0][:-1])])
+        
     return preds, vol, winner_name, len(scores)
 
 # --- 5. SYSTEM CONTROLS ---
 st.sidebar.markdown("**SYSTEM INPUTS**")
-pairs = {
-    "USD/ETB": "ETB=X",
-    "EUR/ETB": "EURETB=X",
-    "GBP/ETB": "GBPETB=X",
-    "CNY/ETB": "CNYETB=X"
-}
+pairs = {"USD/ETB": "ETB=X", "EUR/ETB": "EURETB=X", "GBP/ETB": "GBPETB=X", "CNY/ETB": "CNYETB=X"}
 selected = st.sidebar.selectbox("INSTRUMENT TICKET", list(pairs.keys()))
 look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 90)
 
@@ -233,73 +161,45 @@ bias_val = {"SHORT": 0.015, "NEUTRAL": 0.0, "LONG": -0.015}[bias]
 try:
     df_raw = get_market_data(pairs[selected])
     if not df_raw.empty:
-        df = df_raw[["Close"]].copy()
-        last_price = float(df["Close"].iloc[-1].item())
-
-        with st.spinner("EXECUTING MODEL BATTLE..."):
+        df = df_raw[['Close']].copy()
+        last_price = float(df['Close'].iloc[-1].item())
+        
+        with st.spinner("ANALYZING MARKET DATA..."):
             forecast, vol, winning_model, model_count = hyper_ensemble_arena(df, look_ahead)
-
-        f_dates = [df.index[-1] + timedelta(days=i) for i in range(1, look_ahead + 1)]
+        
+        f_dates = [df.index[-1] + timedelta(days=i) for i in range(1, look_ahead+1)]
         final_p, low_b, high_b = [], [], []
         for i, v in enumerate(forecast):
-            adj = float(v * (1 + bias_val))
-            cone = float(vol * np.sqrt(i + 1) * 1.645)
-            final_p.append(adj)
-            low_b.append(adj - cone)
-            high_b.append(adj + cone)
+            adj = v * (1 + bias_val)
+            cone = vol * np.sqrt(i + 1) * 1.645
+            final_p.append(adj); low_b.append(adj - cone); high_b.append(adj + cone)
 
         m1, m2, m3 = st.columns(3)
         m1.metric("CURRENT SPOT", f"{last_price:.2f}")
-        m2.metric("TARGET PROJECTION", f"{final_p[-1]:.2f}", delta=f"{final_p[-1] - last_price:.2f}")
+        m2.metric("TARGET PROJECTION", f"{final_p[-1]:.2f}", delta=f"{final_p[-1]-last_price:.2f}")
         m3.metric("CHAMPION CONFIG", winning_model.replace("_", " "))
 
-        # --- GRAPHING ---
+        # --- GRAPHING (WEB SAFE) ---
         st.markdown("<br>", unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(10, 4.2))
-        fig.patch.set_facecolor("#FFFFFF")
-        ax.set_facecolor("#FFFFFF")
-
-        ax.plot(
-            df.index[-200:],
-            df["Close"].tail(200).values.flatten(),
-            color="#000000",
-            linewidth=1.5,
-            label="HISTORICAL"
-        )
-
-        ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color="#2962FF", linewidth=2)
-
-        ax.plot(f_dates, final_p, color="#2962FF", linewidth=2, label="PROJECTION")
-        ax.fill_between(
-            f_dates,
-            low_b,
-            high_b,
-            color="#2962FF",
-            alpha=0.08,
-            label=f"90% RISK CORRIDOR ({model_count} MODELS VERIFIED)"
-        )
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.tick_params(axis="both", labelsize=8, colors="#000000")
-        ax.grid(True, linestyle="-", alpha=0.1, color="#000000")
-        ax.legend(frameon=False, fontsize=8)
+        ax.plot(df.index[-200:], df['Close'].tail(200).values.flatten(), color='#000000', linewidth=1.5, label='HISTORICAL')
+        ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color='#2962FF', linewidth=2.5)
+        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='PROJECTION')
+        ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label=f'90% RISK CORRIDOR ({model_count} MODELS)')
+        
+        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+        ax.tick_params(axis='both', labelsize=9, colors='#000000')
+        ax.grid(True, linestyle='-', alpha=0.1, color='#000000')
+        ax.legend(frameon=False, fontsize=9)
         st.pyplot(fig)
 
-        # Calculator
+        # Strategic Calculator
         st.markdown("---")
         c1, c2 = st.columns([1, 2])
         with c1:
             t_day = st.number_input("DAYS TO SETTLEMENT", min_value=1, max_value=look_ahead, value=30)
         with c2:
-            st.markdown(
-                f"""
-                <div style="border: 2px solid #000000; padding: 10px; font-family: monospace; font-weight: 700; color: #000000; background-color: #FFFFFF;">
-                EXECUTION RATE [{f_dates[t_day-1].strftime('%Y-%m-%d')}]: {final_p[t_day-1]:.2f} ETB
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<div class="settlement-display">EXECUTION RATE [{f_dates[t_day-1].strftime("%Y-%m-%d")}]: {final_p[t_day-1]:.2f} ETB</div>', unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"SYSTEM_EXCEPTION: {str(e)}")
