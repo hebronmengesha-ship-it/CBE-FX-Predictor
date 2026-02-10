@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. HIGH-CONTRAST MONOCHROME CSS ---
+# --- 2. HIGH-CONTRAST MONOCHROME CSS (VISIBILITY FIX) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -39,12 +39,22 @@ st.markdown("""
         background-color: #FFFFFF !important;
         border-right: 2px solid #000000 !important;
     }
+    
+    /* CRITICAL FIX: Number Input Visibility */
+    div[data-testid="stNumberInput"] input {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+        border: 2px solid #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+
     div[data-testid="stSlider"] *, div[data-testid="stSelectSlider"] * {
         background-color: transparent !important;
         color: #000000 !important;
     }
     div[data-baseweb="slider"] > div:first-child > div { background-color: #000000 !important; }
     div[role="slider"] { background-color: #000000 !important; border: 2px solid #000000 !important; }
+
     div[data-testid="stMetric"] {
         border: 2px solid #000000 !important;
         padding: 15px;
@@ -67,18 +77,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DASHBOARD HEADER & MARKET ANALYSIS ---
+# --- 3. DASHBOARD HEADER ---
 st.markdown("### **ML-1 PRICE PREDICTOR** / RIDGE AR")
-st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYBRID DEVALUATION-INFORMED ML</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYPER-HYBRID ENSEMBLE</p>", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div class="analysis-box">
-    <strong>Informed ML Logic:</strong> This model utilizes a Bayesian-informed recursive loop. It cross-references real-time market volatility with a <strong>10% semi-annual devaluation constant</strong>. 
-    By hard-coding this macro-economic benchmark into the learning process, the model accounts for structural downward pressure that standard statistical models often miss.
+    <strong>Market Dynamics:</strong> This model integrates real-time market noise with a <strong>10% semi-annual devaluation constant</strong>. 
+    By hard-coding this structural pressure into the ML recursive loop, the projection accounts for the ETB's historical downward trend of ~10% every six months.
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. THE HYBRID ENGINE (INTEGRATED 10% RULE) ---
+# --- 4. THE HYBRID ENGINE (10% PER 6 MONTHS) ---
 @st.cache_data
 def get_market_data(ticker):
     return yf.download(ticker, period="5y", interval="1d")
@@ -87,88 +97,70 @@ def hybrid_devaluation_engine(df, horizon):
     data = df['Close'].values.flatten()
     vol = float(np.std(np.diff(data)))
     
-    # CALCULATE THE "DEVALUATION DRIFT"
-    # 10% over 180 days (6 months) = ~0.055% daily compounding increase
-    # This is the "Knowledge" we are giving the AI
+    # 10% over 180 days = ~0.053% daily compounded
     daily_deval_constant = (1.10 ** (1/180)) - 1
     
-    # Prepare ML Data
     df_ml = pd.DataFrame({'C': data})
     for l in [1, 2, 3, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
     df_ml = df_ml.dropna()
     X, y = df_ml.drop('C', axis=1), df_ml['C']
     
-    # Train Random Forest
     model = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
     
     preds = []
     curr = X.iloc[-1].values.reshape(1, -1)
     
     for i in range(horizon):
-        # AI prediction based on history
         base_pred = float(model.predict(curr)[0])
-        
-        # INJECT THE 10% RULE: 
-        # The model "adjusts" its prediction by the daily devaluation constant
+        # Force the 10% rule into every step
         hybrid_step = base_pred * (1 + daily_deval_constant)
-        
-        # Add market "noise" for realism
         noise = float(np.random.normal(0, vol * 0.4))
         final_step = hybrid_step + noise
         
         preds.append(final_step)
-        
-        # Recursive update
         new_feats = [final_step] + list(curr[0][:-1])
         curr = np.array([new_feats])
         
     return preds, vol
 
-# --- 5. SYSTEM CONTROLS ---
+# --- 5. SIDEBAR ---
 st.sidebar.markdown("**SYSTEM INPUTS**")
 pairs = {"USD/ETB": "ETB=X", "EUR/ETB": "EURETB=X", "GBP/ETB": "GBPETB=X", "CNY/ETB": "CNYETB=X"}
 selected = st.sidebar.selectbox("INSTRUMENT TICKET", list(pairs.keys()))
-look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 90)
+look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 180)
 
-# --- 6. CORE EXECUTION ---
+# --- 6. EXECUTION ---
 try:
     df_raw = get_market_data(pairs[selected])
     if not df_raw.empty:
         df = df_raw[['Close']].copy()
         last_price = float(df['Close'].iloc[-1].item())
         
-        with st.spinner("CALIBRATING HYBRID MODEL..."):
+        with st.spinner("CALCULATING HYBRID CURVE..."):
             forecast, vol = hybrid_devaluation_engine(df, look_ahead)
         
         f_dates = [df.index[-1] + timedelta(days=i) for i in range(1, look_ahead+1)]
-        final_p, low_b, high_b = [], [], []
-        for i, v in enumerate(forecast):
-            cone = vol * np.sqrt(i + 1) * 1.645
-            final_p.append(v)
-            low_b.append(v - cone)
-            high_b.append(v + cone)
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("CURRENT SPOT", f"{last_price:.2f}")
         
-        # Projecting specifically for the 6-month (180 day) mark
-        target_180 = last_price * 1.10
-        m2.metric("HYBRID TARGET (6-MO)", f"{target_180:.2f}", delta="+10.00%")
-        m3.metric("MODEL STATUS", "DEVAL-INFORMED")
+        # --- HYBRID TARGET BENCHMARKS ---
+        target_tomorrow = last_price * (1.10 ** (1/180))
+        target_3mo = last_price * (1.10 ** (90/180))
+        target_6mo = last_price * 1.10
+
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("HYBRID: TOMORROW", f"{target_tomorrow:.2f}")
+        col_b.metric("HYBRID: 3 MONTHS", f"{target_3mo:.2f}")
+        col_c.metric("HYBRID: 6 MONTHS", f"{target_6mo:.2f}")
 
         # --- GRAPHING ---
         st.markdown("<br>", unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(10, 4.2))
+        fig.patch.set_facecolor('#FFFFFF')
+        ax.set_facecolor('#FFFFFF')
         ax.plot(df.index[-180:], df['Close'].tail(180).values.flatten(), color='#000000', linewidth=1.5, label='HISTORICAL')
         
-        # Bridge Connection
-        ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color='#2962FF', linewidth=2.5)
-        
-        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='HYBRID ML PROJECTION')
-        ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label='90% RISK CORRIDOR')
-        
-        # Visualizing the Devaluation Curve
-        ax.axhline(y=target_180, color='black', linestyle=':', alpha=0.3, label='10% STRATEGIC CAP')
+        # Bridge & Projection
+        ax.plot([df.index[-1], f_dates[0]], [last_price, forecast[0]], color='#2962FF', linewidth=2.5)
+        ax.plot(f_dates, forecast, color='#2962FF', linewidth=2.5, label='HYBRID ML PROJECTION')
         
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.tick_params(axis='both', labelsize=9, colors='#000000')
@@ -180,9 +172,10 @@ try:
         st.markdown("---")
         c1, c2 = st.columns([1, 2])
         with c1:
-            t_day = st.number_input("DAYS TO SETTLEMENT", min_value=1, max_value=look_ahead, value=30)
+            # FIX: Forced visibility for the number input
+            t_day = st.number_input("DAYS TO SETTLEMENT", min_value=1, max_value=look_ahead, value=30, step=1)
         with c2:
-            st.markdown(f'<div style="border: 2px solid #000000; padding: 15px; font-family: monospace; font-weight: 800; color: #000000; background-color: #FFFFFF;">EXECUTION RATE [{f_dates[t_day-1].strftime("%Y-%m-%d")}]: {final_p[t_day-1]:.2f} ETB</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="border: 2px solid #000000; padding: 15px; font-family: monospace; font-weight: 800; color: #000000; background-color: #FFFFFF;">EXECUTION RATE [{f_dates[t_day-1].strftime("%Y-%m-%d")}]: {forecast[t_day-1]:.2f} ETB</div>', unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"SYSTEM_EXCEPTION: {str(e)}")
