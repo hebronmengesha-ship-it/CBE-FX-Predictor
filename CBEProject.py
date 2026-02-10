@@ -50,11 +50,9 @@ st.markdown("""
         color: #000000 !important;
     }
 
-    /* Slider Track & Thumb (Solid Black) */
     div[data-baseweb="slider"] > div:first-child > div { background-color: #000000 !important; }
     div[role="slider"] { background-color: #000000 !important; border: 2px solid #000000 !important; }
 
-    /* Metric Panels: Clinical Black Borders */
     div[data-testid="stMetric"] {
         border: 2px solid #000000 !important;
         padding: 15px;
@@ -68,7 +66,6 @@ st.markdown("""
         letter-spacing: 1.2px;
     }
 
-    /* Layout Fixes */
     div[data-testid="stNumberInput"] input {
         color: #000000 !important;
         background-color: #FFFFFF !important;
@@ -114,7 +111,6 @@ def hyper_ensemble_arena(df, horizon):
     train_vals, test_vals = data[:-60], data[-60:]
     scores = {}
 
-    # ARIMA & RF Battle
     configs = [(1,1,0), (2,1,0), (5,1,0), (1,1,1), (2,1,2), (5,1,2), (3,1,1), (4,1,0)]
     for cfg in configs:
         try:
@@ -180,9 +176,9 @@ try:
         m1, m2, m3 = st.columns(3)
         m1.metric("CURRENT SPOT", f"{last_price:.2f}")
         
-        # DISPLAY PROJECTED PRICE IN METRIC
-        proj_price = final_p[-1]
-        m2.metric("TARGET PROJECTION", f"{proj_price:.2f}", delta=f"{proj_price-last_price:.2f}")
+        # --- NEW LOGIC: Target Projection with 10% Benchmark ---
+        target_benchmark = last_price * 1.10
+        m2.metric("TARGET (+10% STRESS)", f"{target_benchmark:.2f}", delta=f"+10.00%")
         
         m3.metric("CHAMPION CONFIG", winning_model.replace("_", " "))
 
@@ -190,9 +186,15 @@ try:
         st.markdown("<br>", unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(10, 4.2))
         ax.plot(df.index[-180:], df['Close'].tail(180).values.flatten(), color='#000000', linewidth=1.5, label='HISTORICAL')
+        
+        # Bridge Connection
         ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color='#2962FF', linewidth=2.5)
-        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='PROJECTION')
+        
+        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='ML PROJECTION')
         ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label=f'90% RISK CORRIDOR ({model_count} MODELS)')
+        
+        # Add the 10% Target line on the graph for visual reference
+        ax.axhline(y=target_benchmark, color='black', linestyle=':', alpha=0.5, label='10% BENCHMARK')
         
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.tick_params(axis='both', labelsize=9, colors='#000000')
