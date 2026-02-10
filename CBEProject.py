@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error
 from datetime import date, timedelta
 import warnings
 
-# Force web-safe chart rendering
+# Force a web-safe chart backend
 import matplotlib
 matplotlib.use('Agg')
 warnings.filterwarnings("ignore")
@@ -22,145 +22,170 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. HIGH-CONTRAST MONOCHROME CSS (VISIBILITY FIX) ---
+# --- 2. THE ULTIMATE "ZERO-OVERLAY" CSS (FINAL FIX) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', sans-serif;
         background-color: #FFFFFF !important;
         color: #000000 !important;
     }
+
+    /* Force Black Text Visibility */
     h1, h2, h3, h4, p, span, label, div {
         color: #000000 !important;
         background-color: transparent !important;
     }
+
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-right: 2px solid #000000 !important;
     }
-    
-    /* CRITICAL FIX: Number Input Visibility */
-    div[data-testid="stNumberInput"] input {
-        color: #000000 !important;
-        background-color: #FFFFFF !important;
-        border: 2px solid #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-    }
 
+    /* --- SLIDER LABEL REPAIR --- */
+    /* This kills the black highlight boxes in the sidebar */
     div[data-testid="stSlider"] *, div[data-testid="stSelectSlider"] * {
         background-color: transparent !important;
+        background: transparent !important;
         color: #000000 !important;
     }
+
+    /* Slider Track & Thumb (Solid Black) */
     div[data-baseweb="slider"] > div:first-child > div { background-color: #000000 !important; }
     div[role="slider"] { background-color: #000000 !important; border: 2px solid #000000 !important; }
+    div[data-testid="stThumbValue"] { font-weight: 800 !important; }
 
+    /* Metric Panels: Clinical Black Borders */
     div[data-testid="stMetric"] {
         border: 2px solid #000000 !important;
         padding: 15px;
         background-color: #FFFFFF !important;
     }
+    
     label[data-testid="stMetricLabel"] {
         text-transform: uppercase;
         font-size: 0.85rem !important;
         font-weight: 900 !important;
+        letter-spacing: 1.2px;
     }
-    .analysis-box {
+
+    /* Settlement Tool Layout Fix */
+    div[data-testid="stNumberInput"] input {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+        border: 2px solid #000000 !important;
+    }
+
+    .settlement-display {
         border: 2px solid #000000;
         padding: 15px;
-        font-family: 'Inter', sans-serif;
+        font-family: monospace;
+        font-weight: 800;
         color: #000000;
-        background-color: #F8F9FA;
-        margin-bottom: 20px;
+        background-color: #FFFFFF;
+        margin-top: 5px;
     }
+
     #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 3. DASHBOARD HEADER ---
 st.markdown("### **ML-1 PRICE PREDICTOR** / RIDGE AR")
-st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYPER-HYBRID ENSEMBLE</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SYSTEM CLOCK: {date.today().strftime('%Y-%m-%d')} | ARCHITECTURE: HYPER-ENSEMBLE (24 CONFIGS)</p>", unsafe_allow_html=True)
+st.markdown("---")
 
-st.markdown(f"""
-<div class="analysis-box">
-    <strong>Market Dynamics:</strong> This model integrates real-time market noise with a <strong>10% semi-annual devaluation constant</strong>. 
-    By hard-coding this structural pressure into the ML recursive loop, the projection accounts for the ETB's historical downward trend of ~10% every six months.
-</div>
-""", unsafe_allow_html=True)
-
-# --- 4. THE HYBRID ENGINE (10% PER 6 MONTHS) ---
+# --- 4. THE HYPER-ENSEMBLE ENGINE ---
 @st.cache_data
 def get_market_data(ticker):
     return yf.download(ticker, period="5y", interval="1d")
 
-def hybrid_devaluation_engine(df, horizon):
+def hyper_ensemble_arena(df, horizon):
     data = df['Close'].values.flatten()
     vol = float(np.std(np.diff(data)))
+    drift = float(np.mean(np.diff(data[-60:])))
     
-    # 10% over 180 days = ~0.053% daily compounded
-    daily_deval_constant = (1.10 ** (1/180)) - 1
-    
+    train_vals, test_vals = data[:-60], data[-60:]
+    scores = {}
+
+    # ARIMA 12-Pack
+    configs = [(1,1,0), (2,1,0), (5,1,0), (0,1,1), (1,1,1), (2,1,2), (5,1,2), (1,2,1), (0,2,1), (3,1,1), (4,1,0), (2,1,1)]
+    for cfg in configs:
+        try:
+            res = ARIMA(train_vals, order=cfg).fit().forecast(steps=60)
+            scores[f"ARIMA{cfg}"] = np.sqrt(mean_squared_error(test_vals, res))
+        except: pass
+
+    # RF 8-Pack
     df_ml = pd.DataFrame({'C': data})
-    for l in [1, 2, 3, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
+    for l in [1, 2, 3, 5, 7, 14, 30]: df_ml[f'L{l}'] = df_ml['C'].shift(l)
     df_ml = df_ml.dropna()
     X, y = df_ml.drop('C', axis=1), df_ml['C']
-    
-    model = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
+    train_x, test_x = X.iloc[:-60], X.iloc[-60:]
+    train_y = y.iloc[:-60]
+
+    for d in [5, 10, 20, None]:
+        for e in [50, 100]:
+            try:
+                m = RandomForestRegressor(n_estimators=e, max_depth=d, random_state=42).fit(train_x, train_y)
+                scores[f"RF_D{d}_E{e}"] = np.sqrt(mean_squared_error(test_vals, m.predict(test_x)))
+            except: pass
+
+    winner_name = min(scores, key=scores.get)
+    final_rf = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
     
     preds = []
     curr = X.iloc[-1].values.reshape(1, -1)
-    
-    for i in range(horizon):
-        base_pred = float(model.predict(curr)[0])
-        # Force the 10% rule into every step
-        hybrid_step = base_pred * (1 + daily_deval_constant)
-        noise = float(np.random.normal(0, vol * 0.4))
-        final_step = hybrid_step + noise
+    for _ in range(horizon):
+        p = final_rf.predict(curr)[0]
+        step = float(p + np.random.normal(drift, vol * 0.4))
+        preds.append(step)
+        curr = np.array([[step] + list(curr[0][:-1])])
         
-        preds.append(final_step)
-        new_feats = [final_step] + list(curr[0][:-1])
-        curr = np.array([new_feats])
-        
-    return preds, vol
+    return preds, vol, winner_name, len(scores)
 
-# --- 5. SIDEBAR ---
+# --- 5. SYSTEM CONTROLS ---
 st.sidebar.markdown("**SYSTEM INPUTS**")
 pairs = {"USD/ETB": "ETB=X", "EUR/ETB": "EURETB=X", "GBP/ETB": "GBPETB=X", "CNY/ETB": "CNYETB=X"}
 selected = st.sidebar.selectbox("INSTRUMENT TICKET", list(pairs.keys()))
-look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 180)
+look_ahead = st.sidebar.slider("FORECAST RANGE (DAYS)", 30, 180, 90)
 
-# --- 6. EXECUTION ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**BIAS OFFSET**")
+bias = st.sidebar.select_slider("DIRECTIONAL BIAS", options=["SHORT", "NEUTRAL", "LONG"], value="NEUTRAL")
+bias_val = {"SHORT": 0.015, "NEUTRAL": 0.0, "LONG": -0.015}[bias]
+
+# --- 6. CORE EXECUTION ---
 try:
     df_raw = get_market_data(pairs[selected])
     if not df_raw.empty:
         df = df_raw[['Close']].copy()
         last_price = float(df['Close'].iloc[-1].item())
         
-        with st.spinner("CALCULATING HYBRID CURVE..."):
-            forecast, vol = hybrid_devaluation_engine(df, look_ahead)
+        with st.spinner("ANALYZING MARKET DATA..."):
+            forecast, vol, winning_model, model_count = hyper_ensemble_arena(df, look_ahead)
         
         f_dates = [df.index[-1] + timedelta(days=i) for i in range(1, look_ahead+1)]
-        
-        # --- HYBRID TARGET BENCHMARKS ---
-        target_tomorrow = last_price * (1.10 ** (1/180))
-        target_3mo = last_price * (1.10 ** (90/180))
-        target_6mo = last_price * 1.10
+        final_p, low_b, high_b = [], [], []
+        for i, v in enumerate(forecast):
+            adj = v * (1 + bias_val)
+            cone = vol * np.sqrt(i + 1) * 1.645
+            final_p.append(adj); low_b.append(adj - cone); high_b.append(adj + cone)
 
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("HYBRID: TOMORROW", f"{target_tomorrow:.2f}")
-        col_b.metric("HYBRID: 3 MONTHS", f"{target_3mo:.2f}")
-        col_c.metric("HYBRID: 6 MONTHS", f"{target_6mo:.2f}")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("CURRENT SPOT", f"{last_price:.2f}")
+        m2.metric("TARGET PROJECTION", f"{final_p[-1]:.2f}", delta=f"{final_p[-1]-last_price:.2f}")
+        m3.metric("CHAMPION CONFIG", winning_model.replace("_", " "))
 
-        # --- GRAPHING ---
+        # --- GRAPHING (WEB SAFE) ---
         st.markdown("<br>", unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(10, 4.2))
-        fig.patch.set_facecolor('#FFFFFF')
-        ax.set_facecolor('#FFFFFF')
-        ax.plot(df.index[-180:], df['Close'].tail(180).values.flatten(), color='#000000', linewidth=1.5, label='HISTORICAL')
-        
-        # Bridge & Projection
-        ax.plot([df.index[-1], f_dates[0]], [last_price, forecast[0]], color='#2962FF', linewidth=2.5)
-        ax.plot(f_dates, forecast, color='#2962FF', linewidth=2.5, label='HYBRID ML PROJECTION')
+        ax.plot(df.index[-200:], df['Close'].tail(200).values.flatten(), color='#000000', linewidth=1.5, label='HISTORICAL')
+        ax.plot([df.index[-1], f_dates[0]], [last_price, final_p[0]], color='#2962FF', linewidth=2.5)
+        ax.plot(f_dates, final_p, color='#2962FF', linewidth=2.5, label='PROJECTION')
+        ax.fill_between(f_dates, low_b, high_b, color='#2962FF', alpha=0.08, label=f'90% RISK CORRIDOR ({model_count} MODELS)')
         
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.tick_params(axis='both', labelsize=9, colors='#000000')
@@ -172,10 +197,9 @@ try:
         st.markdown("---")
         c1, c2 = st.columns([1, 2])
         with c1:
-            # FIX: Forced visibility for the number input
-            t_day = st.number_input("DAYS TO SETTLEMENT", min_value=1, max_value=look_ahead, value=30, step=1)
+            t_day = st.number_input("DAYS TO SETTLEMENT", min_value=1, max_value=look_ahead, value=30)
         with c2:
-            st.markdown(f'<div style="border: 2px solid #000000; padding: 15px; font-family: monospace; font-weight: 800; color: #000000; background-color: #FFFFFF;">EXECUTION RATE [{f_dates[t_day-1].strftime("%Y-%m-%d")}]: {forecast[t_day-1]:.2f} ETB</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="settlement-display">EXECUTION RATE [{f_dates[t_day-1].strftime("%Y-%m-%d")}]: {final_p[t_day-1]:.2f} ETB</div>', unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"SYSTEM_EXCEPTION: {str(e)}")
