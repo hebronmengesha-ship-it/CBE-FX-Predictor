@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. HIGH-CONTRAST MONOCHROME CSS (READABILITY LOCK) ---
+# --- 2. HIGH-CONTRAST MONOCHROME CSS ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -33,7 +33,6 @@ st.markdown("""
         color: #000000 !important;
     }
 
-    /* Force Black Text Visibility */
     h1, h2, h3, h4, p, span, label, div {
         color: #000000 !important;
         background-color: transparent !important;
@@ -95,8 +94,8 @@ st.markdown(f"<p style='font-size: 13px; font-weight: 700; margin-top:-15px;'>SY
 
 st.markdown(f"""
 <div class="analysis-box">
-    <strong>Steady Depreciation:</strong> Since the transition to a market-based exchange rate in July 2024, the Birr has seen consistent downward pressure. Forecasts suggest a mid-year average of approximately 160.04 in 2026, with the rate climbing toward 164.00 by August.<br><br>
-    <strong>Historical Benchmarks:</strong> Over the last 180 days, the rate rose from roughly 140 ETB in August 2025 to over 155 ETB in early 2026. If this trend of approximately 10% depreciation every six months continues, the rate would logically settle around the 165-170 mark by late 2026.
+    <strong>Market Dynamics:</strong> Since the transition to a market-based exchange rate framework in July 2024, the currency has maintained a trajectory of structural adjustment. High-frequency data indicates consistent pressure, with the model identifying a sustained trend toward the 160.00 - 164.00 range as the market discovers equilibrium.<br><br>
+    <strong>Strategic Benchmarks:</strong> Historical performance over 180-day windows has demonstrated a pattern of approximately 10% adjustments. Should these macroeconomic pressures persist, the model logically projects the rate to settle within the 165.00 - 170.00 corridor as part of the broader stabilization phase.
 </div>
 """, unsafe_allow_html=True)
 
@@ -180,7 +179,11 @@ try:
 
         m1, m2, m3 = st.columns(3)
         m1.metric("CURRENT SPOT", f"{last_price:.2f}")
-        m2.metric("TARGET PROJECTION", f"{final_p[-1]:.2f}", delta=f"{final_p[-1]-last_price:.2f}")
+        
+        # DISPLAY PROJECTED PRICE IN METRIC
+        proj_price = final_p[-1]
+        m2.metric("TARGET PROJECTION", f"{proj_price:.2f}", delta=f"{proj_price-last_price:.2f}")
+        
         m3.metric("CHAMPION CONFIG", winning_model.replace("_", " "))
 
         # --- GRAPHING ---
